@@ -11,12 +11,12 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.Nullable;
+import android.support.v7.widget.AppCompatImageView;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
-import android.widget.ImageView;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -26,29 +26,28 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Created by zhenghui on 2017/5/19.
+ * 1. 首先它能显示图片初始的样子（无论是全貌还是概貌）
+ * 2. 支持手势操作达到图片缩放、漫游的效果，当然，它有一定的缩放倍数限制
+ * 3. 支持无损查看高清图片并控制内存使用，理论上讲，能支持 "无限" 的缩放
+ * 4. 更高级的，能支持图片编辑、图片批注、图片分享保存等功能
  */
+public class XPhotoView extends AppCompatImageView implements IXPhotoView {
 
-public class XPhotoView extends ImageView implements IXphotoView{
     private static final String TAG = "XPhotoView";
 
-    private IViewAttacher mPhotoAttacher;
+    private IXPhotoViewLinker mPhotoViewLinker;
 
-    private GestureManager mGestureManager;
-
+    private XPhotoViewGestureManager mGestureManager;
     private OnTabListener mSingleTabListener;
-
     private DoubleTabScale mDefaultDoubleTabScale;
 
-    private XPhotoViewListener.OnXPhotoLoadListener mListener;
+    private XPhotoViewCallback.OnXPhotoLoadListener mListener;
+
+    private boolean mScaleEnable = true;
 
     private Movie mMovie;
-
-    private boolean sScaleEnable = true;
-
-    private boolean sGif = false;
-
-    private long movieStart;
+    private long mMovieStart;
+    private boolean mGif = false;
 
     public XPhotoView(Context context) {
         this(context, null, 0);
@@ -61,19 +60,15 @@ public class XPhotoView extends ImageView implements IXphotoView{
     public XPhotoView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         initialize(context, attrs);
-        mPhotoAttacher = new PhotoViewAttacher(this);
-        mGestureManager = new GestureManager(this.getContext(), this, mPhotoAttacher);
-    }
-
-    public void setLoadListener(XPhotoViewListener.OnXPhotoLoadListener listener) {
-        mListener = listener;
+        mPhotoViewLinker = new XPhotoViewLinker(this);
+        mGestureManager = new XPhotoViewGestureManager(this.getContext(), this, mPhotoViewLinker);
     }
 
     /**
-     * 获取默认配置属性，如 ScaleType 等*/
+     * 获取默认配置属性，如 ScaleType 等
+     */
     private void initialize(Context context, AttributeSet attrs) {
         mDefaultDoubleTabScale = DoubleTabScale.CENTER_CROP;
-
         super.setOnLongClickListener(new OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
@@ -83,128 +78,15 @@ public class XPhotoView extends ImageView implements IXphotoView{
     }
 
     public void setScaleEnable(boolean flag) {
-        sScaleEnable = flag;
+        mScaleEnable = flag;
+    }
+
+    public void setLoadListener(XPhotoViewCallback.OnXPhotoLoadListener listener) {
+        mListener = listener;
     }
 
     public void setSingleTabListener(OnTabListener listener) {
         mSingleTabListener = listener;
-    }
-
-    public void setImageResource(@DrawableRes int resId) {
-        Drawable drawable = this.getContext().getResources().getDrawable(resId);
-        if(drawable == null) {
-            setImage((FileInputStream) null);
-
-            return;
-        }
-
-        this.setImageDrawable(drawable);
-    }
-
-    /** 设置图片的主入口 */
-    public void setImage(Bitmap image) {
-        if(sGif) {
-            return;
-        }
-        super.setImageBitmap(image);
-        if(mListener != null) {
-            mListener.onImageLoadStart(this);
-            Log.d(TAG, "setImage: time: " + System.currentTimeMillis());
-        }
-        mPhotoAttacher.setBitmap(image, false);
-    }
-
-    public void setImage(String path) {
-        setImage(new File(path));
-    }
-
-    public void setImage(File file) {
-        presetImage(file);
-        if(file == null || !file.exists()) {
-            setImage((FileInputStream) null);
-            return;
-        }
-
-        try {
-            FileInputStream fileInputStream = new FileInputStream(file);
-            mMovie = Movie.decodeStream(fileInputStream);
-            if(mMovie == null) {
-                sGif = false;
-            } else {
-                sGif = true;
-            }
-            fileInputStream.close();
-            fileInputStream = new FileInputStream(file);
-            setImage(fileInputStream);
-        } catch (FileNotFoundException exp) {
-
-        } catch (IOException e) {
-
-        }
-    }
-
-    private void presetImage(File file) {
-        if(file.exists()) {
-            Bitmap bitmap = BitmapFactory.decodeFile(file.getPath());
-            super.setImageBitmap(bitmap);
-        }
-    }
-
-    public void setImage(InputStream ios) {
-        this.setImageAsStream(ios);
-    }
-
-    /** 设置图片的主入口 */
-    public void setImage(FileInputStream ios) {
-        this.setImageAsStream(ios);
-    }
-
-    private void setImageAsStream(InputStream ios) {
-        if(mListener != null) {
-            mListener.onImageLoadStart(this);
-            Log.d(TAG, "setImage: time: " + System.currentTimeMillis());
-        }
-        if(sGif) {
-            try {
-                byte[] byteArray = inputStreamToByte(ios);
-                mMovie = Movie.decodeByteArray(byteArray, 0, byteArray.length);
-            } catch (IOException e) {
-            }
-            if (mMovie != null) {
-                //it's a gif
-                sScaleEnable = false;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-                }
-            }
-            onSetImageFinished(null, true, null);
-        } else {
-            mPhotoAttacher.setInputStream(ios, Bitmap.Config.RGB_565);
-        }
-    }
-
-    public static byte[] inputStreamToByte(InputStream in) throws IOException {
-
-        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-        byte[] data = new byte[1024];
-        int count = -1;
-        while((count = in.read(data,0,1024)) != -1)
-            outStream.write(data, 0, count);
-
-        data = null;
-        return outStream.toByteArray();
-    }
-
-    public void setGif(byte[] byteArray) {
-        sGif = true;
-        mMovie = Movie.decodeByteArray(byteArray, 0, byteArray.length);
-        if(mMovie != null) {
-            sScaleEnable = false;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            }
-        }
-        onSetImageFinished(null, true, null);
     }
 
     @Override
@@ -213,19 +95,167 @@ public class XPhotoView extends ImageView implements IXphotoView{
         onSetImageFinished(null, true, null);
     }
 
+    public void setImageResource(@DrawableRes int resId) {
+        Drawable drawable = this.getContext().getResources().getDrawable(resId);
+        if (drawable == null) {
+            setImageWithStream((FileInputStream) null);
+            return;
+        }
+        this.setImageDrawable(drawable);
+    }
+
+    public void setImage(Bitmap image) {
+        if (mGif) {
+            return;
+        }
+        super.setImageBitmap(image);
+        if (mListener != null) {
+            mListener.onImageLoadStart(this);
+            Log.d(TAG, "setImage: time: " + System.currentTimeMillis());
+        }
+        mPhotoViewLinker.setBitmap(image, false);
+    }
+
+    public void setImage(String path) {
+        setImage(new File(path));
+    }
+
+    public void setImage(File file) {
+
+        if (file == null || !file.exists()) {
+            setImageWithStream(null);
+            return;
+        }
+
+        presetImage(file);
+
+        FileInputStream fileInputStream = null;
+        try {
+            // 检查是否是 GIF
+            checkGifPicture(file);
+            fileInputStream = new FileInputStream(file);
+            setImageWithStream(fileInputStream);
+        } catch (FileNotFoundException exp) {
+            Log.e(TAG, "setImage failed file " + exp.getMessage());
+        } finally {
+            if (fileInputStream != null) {
+                try {
+                    fileInputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    /**
+     * 预置图片
+     * @param file
+     */
+    private void presetImage(File file) {
+        if (file.exists()) {
+            Bitmap bitmap = BitmapFactory.decodeFile(file.getPath());
+            super.setImageBitmap(bitmap);
+        }
+    }
+
+    public void setImageWithStream(InputStream ios) {
+        this.setImageAsStream(ios);
+    }
+
+    public void setImageWithStream(FileInputStream ios) {
+        this.setImageAsStream(ios);
+    }
+
+    private void setImageAsStream(InputStream ios) {
+        if (mListener != null) {
+            mListener.onImageLoadStart(this);
+            Log.d(TAG, "setImage: time: " + System.currentTimeMillis());
+        }
+
+        if (mGif) {
+            try {
+                byte[] byteArray = inputStreamToByte(ios);
+                mMovie = Movie.decodeByteArray(byteArray, 0, byteArray.length);
+            } catch (IOException ignored) { }
+
+            if (mMovie != null) {
+                // it's a gif
+                mScaleEnable = false;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                    setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+                }
+            }
+            onSetImageFinished(null, true, null);
+        } else {
+            mPhotoViewLinker.setInputStream(ios, Bitmap.Config.RGB_565);
+        }
+    }
+
+    private byte[] inputStreamToByte(InputStream in) throws IOException {
+        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+        byte[] data = new byte[1024];
+        int count;
+        while ((count = in.read(data, 0, 1024)) != -1) {
+            outStream.write(data, 0, count);
+        }
+        return outStream.toByteArray();
+    }
+
+    public void setGif(boolean sGif) {
+        this.mGif = sGif;
+    }
+
+    public void setGif(byte[] byteArray) {
+        mGif = true;
+        mMovie = Movie.decodeByteArray(byteArray, 0, byteArray.length);
+        if (mMovie != null) {
+            mScaleEnable = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            }
+        }
+        onSetImageFinished(null, true, null);
+    }
+
+    private void checkGifPicture(File file) {
+        FileInputStream fileInputStream = null;
+        try {
+            fileInputStream = new FileInputStream(file);
+            mMovie = Movie.decodeStream(fileInputStream);
+            mGif = mMovie != null;
+        } catch (Exception e) {
+            Log.e(TAG, "checkGifPicture occur a exception " + e.getMessage());
+        } finally {
+            if (fileInputStream != null) {
+                try {
+                    fileInputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    @Override
+    public void interceptParentTouchEvent(boolean intercept) {
+        ViewParent parent = getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(intercept);
+        }
+    }
+
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (sScaleEnable) {
+        if (mScaleEnable) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
-                    if (mPhotoAttacher != null && !mPhotoAttacher.isNotAvailable()) {
+                    if (mPhotoViewLinker != null && !mPhotoViewLinker.isNotAvailable()) {
                         interceptParentTouchEvent(true);
                     }
                     break;
-
                 case MotionEvent.ACTION_MOVE:
                     break;
-
                 case MotionEvent.ACTION_UP:
                     interceptParentTouchEvent(false);
                     break;
@@ -237,14 +267,14 @@ public class XPhotoView extends ImageView implements IXphotoView{
 
     @Override
     public void onSingleTab() {
-        if(mSingleTabListener != null) {
+        if (mSingleTabListener != null) {
             mSingleTabListener.onSingleTab();
         }
     }
 
     @Override
     public void onLongTab() {
-        if(mSingleTabListener != null) {
+        if (mSingleTabListener != null) {
             mSingleTabListener.onLongTab();
         }
     }
@@ -252,10 +282,10 @@ public class XPhotoView extends ImageView implements IXphotoView{
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if(sGif && mMovie != null) {
+        if (mGif && mMovie != null) {
             onGifDraw(canvas);
-        } else if(!sGif){
-            mPhotoAttacher.draw(canvas, getWidth(), getHeight());
+        } else if (!mGif) {
+            mPhotoViewLinker.draw(canvas, getWidth(), getHeight());
         }
     }
 
@@ -276,14 +306,14 @@ public class XPhotoView extends ImageView implements IXphotoView{
 
         long now = android.os.SystemClock.uptimeMillis();
 
-        if (movieStart == 0) {
-            movieStart = (int) now;
+        if (mMovieStart == 0) {
+            mMovieStart = (int) now;
         }
 
         int duration;
         if (mMovie != null) {
-            duration = mMovie.duration() == 0 ? 500:mMovie.duration();
-            int relTime = (int) ((now - movieStart) % duration);
+            duration = mMovie.duration() == 0 ? 500 : mMovie.duration();
+            int relTime = (int) ((now - mMovieStart) % duration);
             mMovie.setTime(relTime);
             mMovie.draw(canvas, startX, startY);
             this.invalidate();
@@ -294,16 +324,16 @@ public class XPhotoView extends ImageView implements IXphotoView{
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
 
-        mPhotoAttacher.onViewSizeChanged(w, h);
+        mPhotoViewLinker.onViewSizeChanged(w, h);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        if(sGif && mMovie != null) {
+        if (mGif && mMovie != null) {
             mMovie = null;
         }
-        mPhotoAttacher.destroy();
+        mPhotoViewLinker.destroy();
     }
 
     @Override
@@ -318,12 +348,7 @@ public class XPhotoView extends ImageView implements IXphotoView{
 
     @Override
     public String getCachedDir() {
-        return null;
-    }
-
-    @Override
-    public void onImageSetFinished(boolean finished) {
-
+        return getContext().getFilesDir().getAbsolutePath();
     }
 
     @Override
@@ -332,22 +357,16 @@ public class XPhotoView extends ImageView implements IXphotoView{
     }
 
     @Override
-    public void onSetImageFinished(IViewAttacher bm, boolean success, Rect image) {
-        if(mListener != null && success) {
+    public void onSetImageFinished(IXPhotoViewLinker bm, boolean success, Rect image) {
+        if (mListener != null && success) {
             Log.d(TAG, "onDraw done: time: " + System.currentTimeMillis());
             mListener.onImageLoaded(this);
         }
     }
 
-    @Override
-    public void interceptParentTouchEvent(boolean intercept) {
-        ViewParent parent = getParent();
-        if (parent != null) {
-            parent.requestDisallowInterceptTouchEvent(intercept);
-        }
+    interface OnTabListener {
+        void onSingleTab();
+        void onLongTab();
     }
 
-    public void setGif(boolean sGif) {
-        this.sGif = sGif;
-    }
 }

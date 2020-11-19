@@ -1,21 +1,15 @@
 package com.phoenix.xphotoviewdemo;
 
-import android.content.Intent;
-import android.graphics.Rect;
 import android.os.Bundle;
-import android.os.Environment;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.phoenix.xphotoview.XPhotoView;
-
-import java.io.File;
 
 
 public class MainActivity extends AppCompatActivity
@@ -71,7 +65,8 @@ public class MainActivity extends AppCompatActivity
         try {
             switch (pos % 6) {
                 case 0:
-                    imageView.setImage(getAssets().open("e.jpg"));
+                    // 845 * 16000+
+                    imageView.setImageWithStream(getAssets().open("b.jpg"));
                     break;
 
                 case 1:
@@ -79,21 +74,21 @@ public class MainActivity extends AppCompatActivity
                     break;
 
                 case 2:
-                    imageView.setImage(getAssets().open("b.jpg"));
+                    imageView.setImageWithStream(getAssets().open("a.jpg"));
                     break;
 
                 case 3:
                     imageView.setGif(true);
-                    imageView.setImage(getAssets().open("pikacu.gif"));
+                    imageView.setImageWithStream(getAssets().open("pikacu.gif"));
                     break;
 
                 case 4:
 //                    imageView.setDoubleTapScaleType(XPhotoView.TYPE_FIT.FIT_IMAGE);
-                    imageView.setImage(getAssets().open("c.jpg"));
+                    imageView.setImageWithStream(getAssets().open("c.jpg"));
                     break;
 
                 case 5:
-                    imageView.setImage(getAssets().open("e.jpg"));
+                    imageView.setImageWithStream(getAssets().open("e.jpg"));
                     break;
             }
         }

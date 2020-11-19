@@ -7,12 +7,7 @@ import android.support.annotation.NonNull;
 
 import java.io.InputStream;
 
-/**
- * Author: Kejin ( Liang Ke Jin )
- * Date: 2016/4/25
- */
-public interface IViewAttacher
-{
+interface IXPhotoViewLinker {
     /**
      * 移动, 相对移动 view
      * Left   = 0x01;
@@ -47,7 +42,6 @@ public interface IViewAttacher
      */
     boolean isSettingImage();
 
-
     /**
      * @param bitmap 设置 bitmap
      * @param cache 是否cache
@@ -59,7 +53,6 @@ public interface IViewAttacher
      * @param config config
      */
     void setInputStream(InputStream is, Bitmap.Config config);
-
 
     /**
      * 获取图片真实的
@@ -74,8 +67,6 @@ public interface IViewAttacher
      * @return Rect
      */
     Rect getCurImageRect();
-
-
 
     /**
      * 移动显示的 Bitmap
@@ -94,18 +85,18 @@ public interface IViewAttacher
     void scale(float cx, float cy, float scale);
 
     /**
-     * 当View的size改变, 需要重新计算
+     * 当 View 的 size 改变, 需要重新计算
      * @param width width
      * @param height height
      */
     void onViewSizeChanged(int width, int height);
 
     /**
-     * 画出可见区域的bitmap
+     * 画出可见区域的 bitmap
      * @param canvas canvas
      * @param width width
      * @param height height
-     * @return boolean (true 表示画图片成功, false 表示正在处理图片或者没有图片， 没有真正画出)
+     * @return boolean (true 表示画图片成功, false 表示正在处理图片或者没有图片，没有真正画出)
      */
     boolean draw(@NonNull Canvas canvas, int width, int height);
 
@@ -172,14 +163,13 @@ public interface IViewAttacher
      */
     void scaleToFitViewMin(int cx, int cy, boolean smooth, long smoothTime);
 
-
     /**
      * 更新一次 bitmap 的 sample size
      */
     void updateSampleSize();
 
     /**
-     * 当这个BitmapManager 被丢弃时，必须要执行这个 destroy(), 确保线程已经退出
+     * 当这个 BitmapManager 被丢弃时，必须要执行这个 destroy(), 确保线程已经退出
      */
     void destroy();
 }

@@ -10,11 +10,8 @@ import android.view.ScaleGestureDetector;
 import android.view.ViewConfiguration;
 import android.view.animation.LinearInterpolator;
 
-/**
- * Created by zhenghui on 2017/5/19.
- */
-public class GestureManager extends
-        GestureDetector.SimpleOnGestureListener implements ScaleGestureDetector.OnScaleGestureListener {
+class XPhotoViewGestureManager extends GestureDetector.SimpleOnGestureListener implements ScaleGestureDetector.OnScaleGestureListener {
+
     public final static boolean DEBUG = true;
     public final static String TAG = "GestureManager";
 
@@ -22,19 +19,17 @@ public class GestureManager extends
      * 默认双击放大的时间
      */
     private final static int DOUBLE_SCALE_TIME = 400;
+    private final static float FLING_VELOCITY = 1.0f;
 
+    private IXPhotoViewLinker mPhotoViewLinker;
 
-    private IViewAttacher mBM = null;
+    private IXPhotoView mXPhotoView;
 
-    private IXphotoView mXImageView = null;
+    private XGestureDetector mGestureDetector;
 
-    private XGestureDetector mGestureDetector = null;
-
-    public GestureManager(Context context, IXphotoView xiv,
-                          IViewAttacher ibm) {
-        mBM = ibm;
-        mXImageView = xiv;
-
+    public XPhotoViewGestureManager(Context context, IXPhotoView photoView, IXPhotoViewLinker photoViewLinker) {
+        mPhotoViewLinker = photoViewLinker;
+        mXPhotoView = photoView;
         mGestureDetector = new XGestureDetector(context, this);
     }
 
@@ -44,18 +39,16 @@ public class GestureManager extends
 
 
     private class XGestureDetector extends GestureDetector {
-        /**
-         * 放大手势检测
-         */
-        private ScaleGestureDetector mScaleDetector = null;
 
-        public XGestureDetector(Context context, GestureManager listener)
-        {
+        // 放大手势检测
+        private ScaleGestureDetector mScaleDetector;
+
+        public XGestureDetector(Context context, XPhotoViewGestureManager listener) {
             super(context, listener);
 
             float density = context.getResources().getDisplayMetrics().density;
             float dpi = density * 160.0f;
-            mPhysicalCoeff = SensorManager.GRAVITY_EARTH  * 39.37f * dpi * 0.84f;
+            mPhysicalCoeff = SensorManager.GRAVITY_EARTH  * 39.37f * dpi * 3.8f;
 
             mScaleDetector = new ScaleGestureDetector(context, listener);
         }
@@ -70,58 +63,52 @@ public class GestureManager extends
     }
 
 
-
     @Override
     public boolean onSingleTapConfirmed(MotionEvent e) {
         int x = (int) e.getX();
         int y = (int) e.getY();
         if (DEBUG) {
-            Log.e(TAG, "On Tapped: X: " + x + " Y: " + y + " Is: " + (mBM != null && mBM.isTapOnImage(x, y)));
+            Log.e(TAG, "On Tapped: X: " + x + " Y: " + y + " Is: " + (mPhotoViewLinker != null && mPhotoViewLinker.isTapOnImage(x, y)));
         }
 
-        if(mXImageView != null) {
-            mXImageView.onSingleTab();
+        if (mXPhotoView != null) {
+            mXPhotoView.onSingleTab();
         }
         return true;
     }
 
     @Override
     public boolean onDoubleTap(MotionEvent e) {
-        if (mBM == null) {
+        if (mPhotoViewLinker == null) {
             return false;
         }
 
-        boolean handled = false;
-//        if (mActionListener != null) {
-//            handled = mActionListener.onDoubleTapped(mXImageView.getInstance(), e);
-//        }
-        if (!handled) {
-            int x = (int) e.getX();
-            int y = (int) e.getY();
-            mBM.doubleTapScale(x, y, true, DOUBLE_SCALE_TIME);
-        }
+        int x = (int) e.getX();
+        int y = (int) e.getY();
+        mPhotoViewLinker.doubleTapScale(x, y, true, DOUBLE_SCALE_TIME);
+
         return true;
     }
 
     @Override
     public void onLongPress(MotionEvent e) {
-        if(mXImageView != null) {
-            mXImageView.onLongTab();
+        if (mXPhotoView != null) {
+            mXPhotoView.onLongTab();
         }
     }
 
-    /*************************************滑动****************************************/
+    /************************************* 滑动 ****************************************/
     @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        if (mBM == null) {
+        if (mPhotoViewLinker == null) {
             return false;
         }
 
-        int state = mBM.move((int) -distanceX, (int) -distanceY);
+        int state = mPhotoViewLinker.move((int) -distanceX, (int) -distanceY);
 
-        if ((state & PhotoViewAttacher.LEFT) == PhotoViewAttacher.LEFT ||
-                (state & PhotoViewAttacher.RIGHT) == PhotoViewAttacher.RIGHT) {
-            mXImageView.interceptParentTouchEvent(false);
+        if ((state & XPhotoViewLinker.LEFT) == XPhotoViewLinker.LEFT ||
+                (state & XPhotoViewLinker.RIGHT) == XPhotoViewLinker.RIGHT) {
+            mXPhotoView.interceptParentTouchEvent(false);
         }
 
         return true;
@@ -129,7 +116,7 @@ public class GestureManager extends
 
     @Override
     public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-        startFling(velocityX * 1.2f, velocityY * 1.2f);
+        startFling(velocityX * FLING_VELOCITY, velocityY * FLING_VELOCITY);
         return true;
     }
 
@@ -137,12 +124,12 @@ public class GestureManager extends
 
     @Override
     public boolean onScale(ScaleGestureDetector detector) {
-        if (mBM == null) {
+        if (mPhotoViewLinker == null) {
             return false;
         }
 
         float factor = detector.getScaleFactor();
-        mBM.scale(detector.getFocusX(), detector.getFocusY(), factor);
+        mPhotoViewLinker.scale(detector.getFocusX(), detector.getFocusY(), factor);
 
         return true;
     }
@@ -157,18 +144,23 @@ public class GestureManager extends
         /**
          * 当缩放结束后，计算最新的的SampleSize, 如果SampleSize改变了，则重新解码最新的bitmap
          */
-        if (mBM != null) {
-            mBM.updateSampleSize();
+        if (mPhotoViewLinker != null) {
+            mPhotoViewLinker.updateSampleSize();
         }
     }
 
 
-    /**********************************滑动惯性*******************************/
+    /********************************** 滑动惯性 *******************************/
 
+    // 物理多项式系数
     private float mPhysicalCoeff;
+    // 滑动摩擦
     private float mFlingFriction = ViewConfiguration.getScrollFriction();
+    // 减速加速度，根据对数的换底公式推导
+    // 此值「可能」为 0.9 衰减为 0.78 的衰减加速度，经计算其值为：2.3582017，自然底数 e，即自然增长的极限，其为 2.71828
     private final static float DECELERATION_RATE = (float) (Math.log(0.78) / Math.log(0.9));
-    private final static float INFLEXION = 0.35f;
+    // 拐点
+    private final static float INFLEXION = 0.45f;
 
     private ValueAnimator mValueAnimator = null;
 
@@ -181,8 +173,8 @@ public class GestureManager extends
     private void startFling(final float velocityX, final float velocityY) {
         stopFling();
 
-        final float fx = (velocityX < 0 ? 1 : -1);
-        final float fy = (velocityY < 0 ? 1 : -1);
+        final float directionX = (velocityX < 0 ? 1 : -1);
+        final float directionY = (velocityY < 0 ? 1 : -1);
 
         final float velocity = (float) Math.hypot(velocityX, velocityY);
         final long duration = getSplineFlingDuration(velocity);
@@ -191,15 +183,15 @@ public class GestureManager extends
         mValueAnimator.setInterpolator(new LinearInterpolator());
         mValueAnimator.setDuration(duration);
         mValueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+
             private Double mLastDisX = Double.NaN;
             private Double mLastDisY = Double.NaN;
 
             @Override
             public void onAnimationUpdate(ValueAnimator animation) {
                 float value = (float) animation.getAnimatedValue();
-
-                double curDisX = getSplineFlingDistance(value * velocityX) * fx;
-                double curDisY = getSplineFlingDistance(value * velocityY) * fy;
+                double curDisX = getSplineFlingDistance(value * velocityX) * directionX;
+                double curDisY = getSplineFlingDistance(value * velocityY) * directionY;
 
                 if (mLastDisX.isNaN() || mLastDisY.isNaN()) {
                     mLastDisX = curDisX;
@@ -210,10 +202,8 @@ public class GestureManager extends
                 int dx = (int) (curDisX - mLastDisX);
                 int dy = (int) (curDisY - mLastDisY);
 
-//                Log.e(TAG, "Dx: " + dx + "  DY: " + dy);
-
-                if (mBM != null) {
-                    mBM.move(dx, dy);
+                if (mPhotoViewLinker != null) {
+                    mPhotoViewLinker.move(dx, dy);
                 }
 
                 mLastDisX = curDisX;
@@ -224,20 +214,25 @@ public class GestureManager extends
         mValueAnimator.start();
     }
 
+    /**
+     * 获取减速递减率
+     * @param velocity
+     * @return
+     */
     private double getSplineDeceleration(float velocity) {
         return Math.log(INFLEXION * Math.abs(velocity) / (mFlingFriction * mPhysicalCoeff));
     }
 
     private int getSplineFlingDuration(float velocity) {
-        final double l = getSplineDeceleration(velocity);
-        final double decelMinusOne = DECELERATION_RATE - 1.0;
-        return (int) (1000.0 * Math.exp(l / decelMinusOne));
+        final double deceleration = getSplineDeceleration(velocity);
+        final double decelMinusOne = DECELERATION_RATE - 1;
+        return (int) (1000.0 * Math.exp(deceleration / decelMinusOne));
     }
 
     private double getSplineFlingDistance(float velocity) {
-        final double l = getSplineDeceleration(velocity);
-        final double decelMinusOne = DECELERATION_RATE - 1.0;
-        return mFlingFriction * mPhysicalCoeff * Math.exp(DECELERATION_RATE / decelMinusOne * l);
+        final double deceleration = getSplineDeceleration(velocity);
+        final double decelMinusOne = DECELERATION_RATE - 1;
+        return mFlingFriction * mPhysicalCoeff * Math.exp(DECELERATION_RATE / decelMinusOne * deceleration);
     }
 }
 

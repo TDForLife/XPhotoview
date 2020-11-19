@@ -9,6 +9,6 @@
         android:id="@+id/viewPager"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#303030"
+        android:background="@android:color/black"
         android:visibility="visible"/>
 </FrameLayout>
